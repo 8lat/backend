@@ -6,27 +6,27 @@ const { exec } = require('child_process');
 
 const app = express();
 app.set('trust proxy', true);
-app.use(express.urlencoded({ extended: true }));
 
-const ADMIN_KEY = 'wyuckie'; // change this
+const ADMIN_KEY = 'wyuckie'; // change this to your secret key
 
+// CORS options - only allow your frontend domains
 const corsOptions = {
-  origin: '*',
+  origin: ['https://www.wyuckie.rocks', 'https://wyuckie.rocks'],
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  credentials: false,
-  optionsSuccessStatus: 204,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // enable preflight OPTIONS requests
+app.options('/chat', cors(corsOptions)); // handle preflight OPTIONS requests
 
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 const bansFile = path.join(__dirname, 'bannedIPs.json');
 const logsFile = path.join(__dirname, 'ipMessages.json');
 
-// Load banned IPs
+// Load bans
 let bannedIPs = new Set();
 try {
   if (fs.existsSync(bansFile)) {
@@ -66,8 +66,6 @@ app.use('/chat', banIPMiddleware);
 function runLlamaCpp(prompt) {
   return new Promise((resolve, reject) => {
     const safePrompt = prompt.replace(/"/g, '\\"');
-
-    // Adjust path to your llama.cpp executable and model
     const cmd = `./llama.cpp/build/main -m /path/to/your/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
 
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
