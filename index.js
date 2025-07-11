@@ -8,32 +8,30 @@ const app = express();
 app.set('trust proxy', true);
 app.use(express.urlencoded({ extended: true }));
 
-const ADMIN_KEY = 'wyuckie'; // change this
+const ADMIN_KEY = 'wyuckie'; // Your admin key here
 
-const corsOptions = {
-  origin: 'https://www.wyuckie.rocks',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  credentials: false,
-  optionsSuccessStatus: 200,
-};
-
-app.use(cors(corsOptions));
-app.options('/chat', cors(corsOptions));
-
+// --- OPEN CORS: allow any origin ---
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://www.wyuckie.rocks");
+  res.header("Access-Control-Allow-Origin", "*"); // allow all origins
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
-  res.header("Access-Control-Allow-Credentials", "false");
   next();
 });
+app.options('*', (req, res) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(200);
+});
 
+// --- parsing middleware ---
 app.use(express.json());
 
+// --- Ban system files ---
 const bansFile = path.join(__dirname, 'bannedIPs.json');
 const logsFile = path.join(__dirname, 'ipMessages.json');
 
+// Load banned IPs
 let bannedIPs = new Set();
 try {
   if (fs.existsSync(bansFile)) {
@@ -46,6 +44,7 @@ function saveBans() {
   fs.writeFileSync(bansFile, JSON.stringify([...bannedIPs], null, 2));
 }
 
+// Load chat logs
 let chatHistories = {};
 try {
   if (fs.existsSync(logsFile)) {
@@ -58,8 +57,7 @@ function saveChatLogs() {
   fs.writeFileSync(logsFile, JSON.stringify(chatHistories, null, 2));
 }
 
-const bannedTerms = ["nigga", "nigger"]; // Add more if needed
-
+// --- Middleware to block banned IPs ---
 function banIPMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   if (bannedIPs.has(ip)) {
@@ -69,13 +67,14 @@ function banIPMiddleware(req, res, next) {
 }
 app.use('/chat', banIPMiddleware);
 
-// ---- FIXED llama command with newer syntax ----
-// Adjust this command to your actual model & binary path.
-// No unsupported flags like --chat, --out-prefix etc.
+// --- Your banned terms (you can extend) ---
+const bannedTerms = ["nigga", "nigger"];
+
+// --- llama.cpp call (adjust your model path!) ---
 function runLlamaCpp(prompt) {
   return new Promise((resolve, reject) => {
     const safePrompt = prompt.replace(/"/g, '\\"');
-    // Example: using ollama or llama.cpp main binary, adjust path & model as needed:
+    // Update model path as needed
     const cmd = `./llama.cpp/build/main -m /path/to/your/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
 
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
@@ -91,6 +90,7 @@ function runLlamaCpp(prompt) {
   });
 }
 
+// --- Chat endpoint ---
 app.post('/chat', async (req, res) => {
   const { message } = req.body;
   const ip = req.ip || req.connection.remoteAddress;
@@ -99,12 +99,14 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: "Invalid message" });
   }
 
+  // Ban IP if banned terms found
   if (bannedTerms.some(term => message.toLowerCase().includes(term))) {
     bannedIPs.add(ip);
     saveBans();
     return res.status(403).json({ error: "You have been banned for inappropriate language." });
   }
 
+  // Track chat history by IP
   if (!chatHistories[ip]) chatHistories[ip] = [];
   chatHistories[ip].push({ role: 'user', content: message });
 
@@ -113,8 +115,8 @@ app.post('/chat', async (req, res) => {
     .join('\n') + '\nWyuckie:';
 
   const prompt = `You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic.
-"
-Here is a list of words you are restricted to ever say. Any variant of "nigger" including "nigga", any common slur such as "faggot" or "retard" other than that, you can say whatever including swear words, like "fuck".
+
+Here is a list of words you are restricted to ever say. Any variant of "nigger" including "nigga", any common slur such as "faggot" or "retard" other then that, you can say whatever including swear words, like "fuck"
 
 ${chatContext}`;
 
@@ -131,8 +133,7 @@ ${chatContext}`;
   }
 });
 
-// --- ADMIN PANEL & BAN/UNBAN ROUTES ---
-
+// --- Admin panel ---
 app.get('/admin', (req, res) => {
   const key = req.query.key;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized: Invalid key");
@@ -235,6 +236,7 @@ app.get('/admin', (req, res) => {
   res.send(html);
 });
 
+// --- Ban/unban endpoints ---
 app.post('/admin/ban', (req, res) => {
   const { ip, key } = req.body;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized");
@@ -251,4 +253,5 @@ app.post('/admin/unban', (req, res) => {
   res.redirect(`/admin?key=${ADMIN_KEY}`);
 });
 
+// --- Listen ---
 app.listen(3000, '0.0.0.0', () => console.log("✅ Wyuckie backend running on port 3000"));
