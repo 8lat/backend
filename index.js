@@ -2,26 +2,28 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const fetch = require('node-fetch');  // npm i node-fetch@2
 
 const app = express();
 app.set('trust proxy', true);
 app.use(express.urlencoded({ extended: true }));
 
-const ADMIN_KEY = 'wyuckie'; // change this to your admin key
+const ADMIN_KEY = 'wyuckie'; // your admin key
 
-// Allow all origins to avoid CORS errors
-app.use(cors({
-  origin: '*',
+const corsOptions = {
+  origin: '*',  // allow all origins, change if needed
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: false,
-}));
+  optionsSuccessStatus: 200,
+};
 
-// Middleware to add CORS headers explicitly on every response
+app.use(cors(corsOptions));
+app.options('/chat', cors(corsOptions));
+
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   res.header("Access-Control-Allow-Credentials", "false");
   next();
@@ -32,7 +34,6 @@ app.use(express.json());
 const bansFile = path.join(__dirname, 'bannedIPs.json');
 const logsFile = path.join(__dirname, 'ipMessages.json');
 
-// Load banned IPs
 let bannedIPs = new Set();
 try {
   if (fs.existsSync(bansFile)) {
@@ -45,7 +46,6 @@ function saveBans() {
   fs.writeFileSync(bansFile, JSON.stringify([...bannedIPs], null, 2));
 }
 
-// Load chat logs
 let chatHistories = {};
 try {
   if (fs.existsSync(logsFile)) {
@@ -58,9 +58,8 @@ function saveChatLogs() {
   fs.writeFileSync(logsFile, JSON.stringify(chatHistories, null, 2));
 }
 
-const bannedTerms = ["nigga", "nigger"]; // Add more if you want
+const bannedTerms = ["nigga", "nigger"]; // banned words
 
-// Middleware: block banned IPs
 function banIPMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   if (bannedIPs.has(ip)) {
@@ -70,24 +69,37 @@ function banIPMiddleware(req, res, next) {
 }
 app.use('/chat', banIPMiddleware);
 
-// Run llama.cpp with prompt
-function runLlamaCpp(prompt) {
-  return new Promise((resolve, reject) => {
-    const safePrompt = prompt.replace(/"/g, '\\"');
-    // CHANGE the model path below to your actual model file path
-    const cmd = `./llama.cpp/build/bin/llama-server -m ./llama.cpp/build/model/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
-    
-    exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('llama.cpp exec error:', error);
-        return reject(error);
-      }
-      if (stderr) {
-        console.error('llama.cpp stderr:', stderr);
-      }
-      resolve(stdout.trim());
-    });
+// Replace this with your llama-server URL:
+const LLAMA_SERVER_URL = 'http://localhost:11434/v1/chat/completions';
+
+async function queryLlamaServer(prompt) {
+  const body = {
+    model: "gemma-3n-E2B-it-Q8_0", // your model name on llama server
+    messages: [
+      { role: "system", content: "You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic." },
+      { role: "user", content: prompt }
+    ],
+    max_tokens: 100,
+    temperature: 0.7,
+  };
+
+  const response = await fetch(LLAMA_SERVER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
+
+  if (!response.ok) {
+    throw new Error(`Llama server error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  // Adjust depending on llama server response structure
+  // Example: data.choices[0].message.content
+  return data.choices && data.choices[0] && data.choices[0].message.content
+    ? data.choices[0].message.content.trim()
+    : "No response from model.";
 }
 
 app.post('/chat', async (req, res) => {
@@ -98,7 +110,7 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: "Invalid message" });
   }
 
-  // Auto-ban on banned terms
+  // Ban check for bad words
   if (bannedTerms.some(term => message.toLowerCase().includes(term))) {
     bannedIPs.add(ip);
     saveBans();
@@ -108,29 +120,23 @@ app.post('/chat', async (req, res) => {
   if (!chatHistories[ip]) chatHistories[ip] = [];
   chatHistories[ip].push({ role: 'user', content: message });
 
-  const chatContext = chatHistories[ip]
-    .map(entry => `${entry.role === 'user' ? 'User' : 'Wyuckie'}: ${entry.content}`)
-    .join('\n') + '\nWyuckie:';
-
-  const prompt = `You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic.
-Here is a list of words you are restricted to ever say. Any variant of "nigger" including "nigga", any common slur such as "faggot" or "retard" other than that, you can say whatever including swear words, like "fuck".
-
-${chatContext}`;
-
+  // Build chat history context for prompt if you want, or just pass message as is.
+  // For now, just send current message to llama server.
   try {
-    const reply = await runLlamaCpp(prompt);
+    const reply = await queryLlamaServer(message);
 
     chatHistories[ip].push({ role: 'bot', content: reply });
     saveChatLogs();
 
     res.json({ reply });
   } catch (err) {
-    console.error("llama.cpp failed:", err);
-    res.status(500).send("Error generating response");
+    console.error("Llama server request failed:", err);
+    res.status(500).json({ error: "Error generating response" });
   }
 });
 
-// Admin Panel route
+// Admin panel & ban/unban routes (same as before, I can add them if you want)
+
 app.get('/admin', (req, res) => {
   const key = req.query.key;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized: Invalid key");
