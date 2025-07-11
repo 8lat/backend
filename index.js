@@ -94,7 +94,8 @@ function runLlamaCpp(prompt) {
     // Change this path to your actual model location
     const modelPath = '/path/to/models/gemma-3n-E2B-it-Q8_0.gguf'; 
 
-    const cmd = `./llama.cpp/build/bin/llama-cli -m ${modelPath} -p "${safePrompt}" --n_predict 100 --color=false`;
+    const cmd = `/root/llama.cpp/build/bin/llama-cli -m ${modelPath} -p "${safePrompt}" --n_predict 100 --color=false`;
+
 
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
       if (error) {
