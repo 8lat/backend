@@ -8,26 +8,29 @@ const app = express();
 app.set('trust proxy', true);
 app.use(express.urlencoded({ extended: true }));
 
-const ADMIN_KEY = 'wyuckie'; // Your admin key here
+const ADMIN_KEY = 'wyuckie'; // your admin key
 
-// --- OPEN CORS: allow any origin ---
+const corsOptions = {
+  origin: '*',  // Allow any origin for testing, change later if needed
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  credentials: false,
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.options('/chat', cors(corsOptions));
+
+// Middleware to add CORS headers (extra safety)
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*"); // allow all origins
+  res.header("Access-Control-Allow-Origin", "*"); // Allow all
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   next();
 });
-app.options('*', (req, res) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  res.sendStatus(200);
-});
 
-// --- parsing middleware ---
 app.use(express.json());
 
-// --- Ban system files ---
 const bansFile = path.join(__dirname, 'bannedIPs.json');
 const logsFile = path.join(__dirname, 'ipMessages.json');
 
@@ -57,7 +60,9 @@ function saveChatLogs() {
   fs.writeFileSync(logsFile, JSON.stringify(chatHistories, null, 2));
 }
 
-// --- Middleware to block banned IPs ---
+const bannedTerms = ["nigga", "nigger"]; // add more if needed
+
+// Middleware to block banned IPs
 function banIPMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
   if (bannedIPs.has(ip)) {
@@ -67,30 +72,7 @@ function banIPMiddleware(req, res, next) {
 }
 app.use('/chat', banIPMiddleware);
 
-// --- Your banned terms (you can extend) ---
-const bannedTerms = ["nigga", "nigger"];
-
-// --- llama.cpp call (adjust your model path!) ---
-function runLlamaCpp(prompt) {
-  return new Promise((resolve, reject) => {
-    const safePrompt = prompt.replace(/"/g, '\\"');
-    // Update model path as needed
-    const cmd = `./llama.cpp/build/main -m ./llama.cpp/build/models/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
-
-    exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('llama.cpp exec error:', error);
-        return reject(error);
-      }
-      if (stderr) {
-        console.error('llama.cpp stderr:', stderr);
-      }
-      resolve(stdout.trim());
-    });
-  });
-}
-
-// --- Chat endpoint ---
+// Replace llama.cpp call with dummy reply for now (to test admin panel & CORS)
 app.post('/chat', async (req, res) => {
   const { message } = req.body;
   const ip = req.ip || req.connection.remoteAddress;
@@ -108,7 +90,7 @@ app.post('/chat', async (req, res) => {
   if (!chatHistories[ip]) chatHistories[ip] = [];
   chatHistories[ip].push({ role: 'user', content: message });
 
-  // Just reply a dummy text for now to avoid llama.cpp errors
+  // Dummy reply so llama.cpp error won’t break server
   const reply = "Hey! This is a dummy reply while llama.cpp is not set up.";
   
   chatHistories[ip].push({ role: 'bot', content: reply });
@@ -117,31 +99,7 @@ app.post('/chat', async (req, res) => {
   res.json({ reply });
 });
 
-
-  const chatContext = chatHistories[ip]
-    .map(entry => `${entry.role === 'user' ? 'User' : 'Wyuckie'}: ${entry.content}`)
-    .join('\n') + '\nWyuckie:';
-
-  const prompt = `You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic.
-
-Here is a list of words you are restricted to ever say. Any variant of "nigger" including "nigga", any common slur such as "faggot" or "retard" other then that, you can say whatever including swear words, like "fuck"
-
-${chatContext}`;
-
-  try {
-    const reply = await runLlamaCpp(prompt);
-
-    chatHistories[ip].push({ role: 'bot', content: reply });
-    saveChatLogs();
-
-    res.json({ reply });
-  } catch (err) {
-    console.error("llama.cpp failed:", err);
-    res.status(500).send("Error generating response");
-  }
-});
-
-// --- Admin panel ---
+// Admin panel
 app.get('/admin', (req, res) => {
   const key = req.query.key;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized: Invalid key");
@@ -244,7 +202,6 @@ app.get('/admin', (req, res) => {
   res.send(html);
 });
 
-// --- Ban/unban endpoints ---
 app.post('/admin/ban', (req, res) => {
   const { ip, key } = req.body;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized");
@@ -261,5 +218,4 @@ app.post('/admin/unban', (req, res) => {
   res.redirect(`/admin?key=${ADMIN_KEY}`);
 });
 
-// --- Listen ---
 app.listen(3000, '0.0.0.0', () => console.log("✅ Wyuckie backend running on port 3000"));
