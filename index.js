@@ -99,16 +99,24 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: "Invalid message" });
   }
 
-  // Ban IP if banned terms found
   if (bannedTerms.some(term => message.toLowerCase().includes(term))) {
     bannedIPs.add(ip);
     saveBans();
     return res.status(403).json({ error: "You have been banned for inappropriate language." });
   }
 
-  // Track chat history by IP
   if (!chatHistories[ip]) chatHistories[ip] = [];
   chatHistories[ip].push({ role: 'user', content: message });
+
+  // Just reply a dummy text for now to avoid llama.cpp errors
+  const reply = "Hey! This is a dummy reply while llama.cpp is not set up.";
+  
+  chatHistories[ip].push({ role: 'bot', content: reply });
+  saveChatLogs();
+
+  res.json({ reply });
+});
+
 
   const chatContext = chatHistories[ip]
     .map(entry => `${entry.role === 'user' ? 'User' : 'Wyuckie'}: ${entry.content}`)
