@@ -95,7 +95,7 @@ function runLlamaCpp(prompt) {
     const modelPath = '/root/llama.cpp/build/models/gemma-3n-E2B-it-Q8_0.gguf';
  
 
-    const cmd = `/root/llama.cpp/build/bin/llama-cli -m ${modelPath} -p "${safePrompt}" --n_predict 100`;
+   const cmd = `/root/llama.cpp/build/bin/llama-cli --chat --no-interactive -m ${modelPath} --prompt "${safePrompt}" --n-predict 100`;
 
 
 
