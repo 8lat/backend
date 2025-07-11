@@ -10,8 +10,22 @@ app.use(express.urlencoded({ extended: true }));
 
 const ADMIN_KEY = 'wyuckie'; // change this to your secret key
 
+const cors = require('cors');
+
+const allowedOrigins = [
+  'https://www.wyuckie.rocks',
+  'https://dev.wyuckie.rocks',
+];
+
 const corsOptions = {
-  origin: 'https://www.wyuckie.rocks',  // your frontend origin here
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // Allow curl, postman etc.
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: false,
@@ -19,7 +33,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('/chat', cors(corsOptions));  // enable preflight OPTIONS for /chat
+app.options('/chat', cors(corsOptions));  // Preflight support for /chat
+
 
 // Middleware to add CORS headers for all responses (extra layer)
 app.use((req, res, next) => {
