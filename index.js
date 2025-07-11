@@ -74,7 +74,7 @@ function banIPMiddleware(req, res, next) {
 app.use('/chat', banIPMiddleware);
 
 // Change this to your llama server URL and model name
-const LLAMA_SERVER_URL = const LLAMA_SERVER_URL = 'https://api.wyuckie.rocks/v1/chat/completions';
+const LLAMA_SERVER_URL = 'https://api.wyuckie.rocks/v1/chat/completions';
 
 async function queryLlamaServer(prompt) {
   const body = {
