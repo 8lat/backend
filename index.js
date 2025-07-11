@@ -10,8 +10,6 @@ app.use(express.urlencoded({ extended: true }));
 
 const ADMIN_KEY = 'wyuckie'; // change this to your secret key
 
-const cors = require('cors');
-
 const allowedOrigins = [
   'https://www.wyuckie.rocks',
   'https://dev.wyuckie.rocks',
