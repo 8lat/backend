@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process'); // added for llama.cpp
+const { exec } = require('child_process');
 
 const app = express();
 app.set('trust proxy', true);
@@ -11,7 +11,7 @@ app.use(express.urlencoded({ extended: true }));
 const ADMIN_KEY = 'wyuckie'; // change this
 
 const corsOptions = {
-  origin: '*',
+  origin: 'https://www.wyuckie.rocks',  // your frontend origin here
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: false,
@@ -19,6 +19,17 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options('/chat', cors(corsOptions));  // enable preflight OPTIONS for /chat
+
+// Middleware to add CORS headers for all responses (extra layer)
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://www.wyuckie.rocks");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.header("Access-Control-Allow-Credentials", "false");
+  next();
+});
+
 app.use(express.json());
 
 const bansFile = path.join(__dirname, 'bannedIPs.json');
@@ -63,10 +74,7 @@ app.use('/chat', banIPMiddleware);
 
 function runLlamaCpp(prompt) {
   return new Promise((resolve, reject) => {
-    // Escape quotes in prompt for shell
     const safePrompt = prompt.replace(/"/g, '\\"');
-
-    // Adjust path to your llama.cpp executable and model
     const cmd = `./llama.cpp/build/main -m /path/to/your/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
 
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
@@ -133,7 +141,7 @@ ${chatContext}`;
   }
 });
 
-// Admin Panel
+// Admin panel and routes below (unchanged)...
 app.get('/admin', (req, res) => {
   const key = req.query.key;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized: Invalid key");
@@ -252,4 +260,4 @@ app.post('/admin/unban', (req, res) => {
   res.redirect(`/admin?key=${ADMIN_KEY}`);
 });
 
-app.listen(3000, () => console.log("✅ Wyuckie backend running on port 3000"));
+app.listen(3000, '0.0.0.0', () => console.log("✅ Wyuckie backend running on port 3000"));
