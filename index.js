@@ -2,16 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');  // npm i node-fetch@2
+const fetch = require('node-fetch');
 
 const app = express();
 app.set('trust proxy', true);
 app.use(express.urlencoded({ extended: true }));
 
-const ADMIN_KEY = 'wyuckie'; // your admin key
+const ADMIN_KEY = 'wyuckie'; // your admin key here
 
+// CORS config: allow all origins
 const corsOptions = {
-  origin: '*',  // allow all origins, change if needed
+  origin: '*',  // Allow any origin
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: false,
@@ -19,10 +20,11 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('/chat', cors(corsOptions));
+app.options('/chat', cors(corsOptions));  // enable preflight OPTIONS for /chat
 
+// Middleware to add CORS headers for all responses (extra layer)
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Origin", "*");  // allow all origins
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   res.header("Access-Control-Allow-Credentials", "false");
@@ -34,6 +36,7 @@ app.use(express.json());
 const bansFile = path.join(__dirname, 'bannedIPs.json');
 const logsFile = path.join(__dirname, 'ipMessages.json');
 
+// Load bans
 let bannedIPs = new Set();
 try {
   if (fs.existsSync(bansFile)) {
@@ -46,6 +49,7 @@ function saveBans() {
   fs.writeFileSync(bansFile, JSON.stringify([...bannedIPs], null, 2));
 }
 
+// Load chat logs
 let chatHistories = {};
 try {
   if (fs.existsSync(logsFile)) {
@@ -58,7 +62,7 @@ function saveChatLogs() {
   fs.writeFileSync(logsFile, JSON.stringify(chatHistories, null, 2));
 }
 
-const bannedTerms = ["nigga", "nigger"]; // banned words
+const bannedTerms = ["nigga", "nigger"]; // your banned terms
 
 function banIPMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
@@ -69,37 +73,38 @@ function banIPMiddleware(req, res, next) {
 }
 app.use('/chat', banIPMiddleware);
 
-// Replace this with your llama-server URL:
-const LLAMA_SERVER_URL = 'http://localhost:11434/v1/chat/completions';
+// Change this to your llama server URL and model name
+const LLAMA_SERVER_URL = 'https://ai.domain.com/v1/chat/completions';
 
 async function queryLlamaServer(prompt) {
   const body = {
-    model: "gemma-3n-E2B-it-Q8_0", // your model name on llama server
+    model: "gemma-3n-E2B-it-Q8_0",  // your model name here
     messages: [
-      { role: "system", content: "You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic." },
+      {
+        role: "system",
+        content: "You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic."
+      },
       { role: "user", content: prompt }
     ],
     max_tokens: 100,
     temperature: 0.7,
   };
 
-  const response = await fetch(LLAMA_SERVER_URL, {
+  const res = await fetch(LLAMA_SERVER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   });
 
-  if (!response.ok) {
-    throw new Error(`Llama server error: ${response.statusText}`);
+  if (!res.ok) {
+    throw new Error(`Llama server error: ${res.status} ${res.statusText}`);
   }
 
-  const data = await response.json();
-
-  // Adjust depending on llama server response structure
-  // Example: data.choices[0].message.content
-  return data.choices && data.choices[0] && data.choices[0].message.content
-    ? data.choices[0].message.content.trim()
-    : "No response from model.";
+  const data = await res.json();
+  if (data.choices && data.choices.length > 0) {
+    return data.choices[0].message.content;
+  }
+  throw new Error('No response from llama server');
 }
 
 app.post('/chat', async (req, res) => {
@@ -110,7 +115,6 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: "Invalid message" });
   }
 
-  // Ban check for bad words
   if (bannedTerms.some(term => message.toLowerCase().includes(term))) {
     bannedIPs.add(ip);
     saveBans();
@@ -120,23 +124,23 @@ app.post('/chat', async (req, res) => {
   if (!chatHistories[ip]) chatHistories[ip] = [];
   chatHistories[ip].push({ role: 'user', content: message });
 
-  // Build chat history context for prompt if you want, or just pass message as is.
-  // For now, just send current message to llama server.
-  try {
-    const reply = await queryLlamaServer(message);
+  const chatContext = chatHistories[ip]
+    .map(entry => `${entry.role === 'user' ? 'User' : 'Wyuckie'}: ${entry.content}`)
+    .join('\n') + '\nWyuckie:';
 
+  try {
+    const reply = await queryLlamaServer(chatContext);
     chatHistories[ip].push({ role: 'bot', content: reply });
     saveChatLogs();
 
     res.json({ reply });
   } catch (err) {
     console.error("Llama server request failed:", err);
-    res.status(500).json({ error: "Error generating response" });
+    res.status(500).send("Error generating response");
   }
 });
 
-// Admin panel & ban/unban routes (same as before, I can add them if you want)
-
+// Admin panel route
 app.get('/admin', (req, res) => {
   const key = req.query.key;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized: Invalid key");
@@ -239,6 +243,7 @@ app.get('/admin', (req, res) => {
   res.send(html);
 });
 
+// Ban an IP (admin only)
 app.post('/admin/ban', (req, res) => {
   const { ip, key } = req.body;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized");
@@ -247,6 +252,7 @@ app.post('/admin/ban', (req, res) => {
   res.redirect(`/admin?key=${ADMIN_KEY}`);
 });
 
+// Unban an IP (admin only)
 app.post('/admin/unban', (req, res) => {
   const { ip, key } = req.body;
   if (key !== ADMIN_KEY) return res.status(401).send("Unauthorized");
