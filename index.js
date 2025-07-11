@@ -36,7 +36,10 @@ app.options('/chat', cors(corsOptions));  // Preflight support for /chat
 
 // Middleware to add CORS headers for all responses (extra layer)
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://www.wyuckie.rocks");
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   res.header("Access-Control-Allow-Credentials", "false");
