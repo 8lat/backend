@@ -74,7 +74,15 @@ function runOllama(prompt) {
     });
   });
 }
+// Dummy handler for /api/show
+app.post('/api/show', (req, res) => {
+  res.json({ message: 'This is a dummy response for /api/show' });
+});
 
+// Dummy handler for /api/pull
+app.post('/api/pull', (req, res) => {
+  res.json({ message: 'This is a dummy response for /api/pull' });
+});
 app.post('/chat', async (req, res) => {
   const { message } = req.body;
   const ip = req.ip || req.connection.remoteAddress;
