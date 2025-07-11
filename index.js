@@ -92,7 +92,8 @@ function runLlamaCpp(prompt) {
   return new Promise((resolve, reject) => {
     const safePrompt = prompt.replace(/"/g, '\\"');
     // Change this path to your actual model location
-    const modelPath = '/path/to/models/gemma-3n-E2B-it-Q8_0.gguf'; 
+    const modelPath = '/root/build/models/gemma-3n-E2B-it-Q8_0.gguf';
+ 
 
     const cmd = `/root/llama.cpp/build/bin/llama-cli -m ${modelPath} -p "${safePrompt}" --n_predict 100 --color=false`;
 
