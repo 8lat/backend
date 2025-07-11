@@ -75,7 +75,7 @@ function runLlamaCpp(prompt) {
   return new Promise((resolve, reject) => {
     const safePrompt = prompt.replace(/"/g, '\\"');
     // CHANGE the model path below to your actual model file path
-    const cmd = `./llama.cpp/build/llama-run -m ./llama.cpp/build/model/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
+    const cmd = `./llama.cpp/build/bin/llama-run -m ./llama.cpp/build/model/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
     
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
       if (error) {
