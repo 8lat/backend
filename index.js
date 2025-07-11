@@ -61,7 +61,7 @@ app.use('/chat', banIPMiddleware);
 function runOllama(prompt) {
   return new Promise((resolve, reject) => {
     const safePrompt = prompt.replace(/"/g, '\\"');
-    const cmd = `ollama run llama3 --prompt "${safePrompt}"`;
+    const cmd = `ollama run llama3 "${safePrompt}"`;
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
       if (error) {
         console.error('ollama exec error:', error);
