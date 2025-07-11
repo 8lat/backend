@@ -8,22 +8,10 @@ const app = express();
 app.set('trust proxy', true);
 app.use(express.urlencoded({ extended: true }));
 
-const ADMIN_KEY = 'wyuckie'; // change this to your secret key
-
-const allowedOrigins = [
-  'https://www.wyuckie.rocks',
-  'https://dev.wyuckie.rocks',
-];
+const ADMIN_KEY = 'wyuckie'; // change this
 
 const corsOptions = {
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // Allow curl, postman etc.
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: 'https://www.wyuckie.rocks',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
   credentials: false,
@@ -31,15 +19,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('/chat', cors(corsOptions));  // Preflight support for /chat
+app.options('/chat', cors(corsOptions));
 
-
-// Middleware to add CORS headers for all responses (extra layer)
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
+  res.header("Access-Control-Allow-Origin", "https://www.wyuckie.rocks");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   res.header("Access-Control-Allow-Credentials", "false");
@@ -51,7 +34,6 @@ app.use(express.json());
 const bansFile = path.join(__dirname, 'bannedIPs.json');
 const logsFile = path.join(__dirname, 'ipMessages.json');
 
-// Load bans
 let bannedIPs = new Set();
 try {
   if (fs.existsSync(bansFile)) {
@@ -64,7 +46,6 @@ function saveBans() {
   fs.writeFileSync(bansFile, JSON.stringify([...bannedIPs], null, 2));
 }
 
-// Load chat logs
 let chatHistories = {};
 try {
   if (fs.existsSync(logsFile)) {
@@ -77,7 +58,7 @@ function saveChatLogs() {
   fs.writeFileSync(logsFile, JSON.stringify(chatHistories, null, 2));
 }
 
-const bannedTerms = ["nigga", "nigger"]; // Extend as needed
+const bannedTerms = ["nigga", "nigger"]; // Add more if needed
 
 function banIPMiddleware(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
@@ -88,15 +69,14 @@ function banIPMiddleware(req, res, next) {
 }
 app.use('/chat', banIPMiddleware);
 
+// ---- FIXED llama command with newer syntax ----
+// Adjust this command to your actual model & binary path.
+// No unsupported flags like --chat, --out-prefix etc.
 function runLlamaCpp(prompt) {
   return new Promise((resolve, reject) => {
     const safePrompt = prompt.replace(/"/g, '\\"');
-    // Change this path to your actual model location
-    const modelPath = '/root/llama.cpp/build/models/gemma-3n-E2B-it-Q8_0.gguf';
- 
-
-   const cmd = `/root/llama.cpp/build/bin/llama-cli -m ${modelPath} --prompt "${safePrompt}" --n-predict 200 --in-prefix '<start_of_turn>user\n' --out-prefix '<start_of_turn>model\n'`;
-
+    // Example: using ollama or llama.cpp main binary, adjust path & model as needed:
+    const cmd = `./llama.cpp/build/main -m /path/to/your/ggml-model.bin -p "${safePrompt}" --color=false --n_predict=100`;
 
     exec(cmd, { timeout: 60000 }, (error, stdout, stderr) => {
       if (error) {
@@ -128,13 +108,12 @@ app.post('/chat', async (req, res) => {
   if (!chatHistories[ip]) chatHistories[ip] = [];
   chatHistories[ip].push({ role: 'user', content: message });
 
-  // Build the prompt for the AI
   const chatContext = chatHistories[ip]
     .map(entry => `${entry.role === 'user' ? 'User' : 'Wyuckie'}: ${entry.content}`)
     .join('\n') + '\nWyuckie:';
 
   const prompt = `You are Wyuckie, a chill, sarcastic 15 y/o who helps people if they don’t act like dicks. No fancy grammar, you're human, swear casually. Avoid slurs, respond differently every time. Keep it fun, not robotic.
-
+"
 Here is a list of words you are restricted to ever say. Any variant of "nigger" including "nigga", any common slur such as "faggot" or "retard" other than that, you can say whatever including swear words, like "fuck".
 
 ${chatContext}`;
@@ -152,7 +131,7 @@ ${chatContext}`;
   }
 });
 
-// Admin panel routes (same as before)...
+// --- ADMIN PANEL & BAN/UNBAN ROUTES ---
 
 app.get('/admin', (req, res) => {
   const key = req.query.key;
